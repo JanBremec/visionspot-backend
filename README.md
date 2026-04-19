@@ -1,312 +1,260 @@
-# DepthAI Library
+# VisionSpot - AI-Powered Blind Navigation Assistant
 
-[![Forum](https://img.shields.io/badge/Forum-discuss-orange)](https://discuss.luxonis.com/)
-[![Docs](https://img.shields.io/badge/Docs-DepthAI_API-yellow)](https://stg.docs.luxonis.com/software/v3/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+Real-time AI navigation system for blind users using OAK camera hardware, facial recognition, OCR, and LLM integration.
 
-DepthAI library for interfacing with Luxonis DepthAI hardware. It's written in C++ and offers Python bindings out of the box.
+> **Project Overview**: This project uses Luxonis DepthAI hardware for real-time spatial detection, combined with Python ML models and LLM APIs to create an intelligent navigation guide.
 
->  **Important — You’re viewing the `v3.x.y` branch.**
->
-> * For production projects that still rely on **v2**, check out the
->   [`v2_stable` branch](https://github.com/luxonis/depthai-core/tree/v2_stable).
-> * Need to migrate? Follow the step-by-step [v2 → v3 Porting Guide](./V2V3PortinGuide.md).
+## 🎯 What This Project Does
 
-## Documentation
-Documentation is available over at [Luxonis DepthAI API](https://docs.luxonis.com/software-v3/depthai/)
+VisionSpot is an AI assistant that helps blind users navigate by:
+- **Real-time obstacle detection** - Warns about objects within 2 meters
+- **Spatial awareness** - Describes left/right/up/down positioning
+- **Facial recognition** - Identifies known people nearby
+- **Text detection (OCR)** - Reads signs and text in real-time
+- **Voice interaction** - Listens to voice commands, responds with audio
+- **Location awareness** - Reverse geocodes GPS to address
+- **Caretaker dashboard** - Real-time monitoring for caregivers
 
-## Examples
-Examples for both C++ and Python are available in the `examples` folder. To see how to build and run them see [README.md](./examples/README.md) for more information.
-To build the examples in C++ configure with the following option added:
-```
-cmake -S. -Bbuild -D'DEPTHAI_BUILD_EXAMPLES=ON'
-cmake --build build
-```
+## 🏗️ How We Used DepthAI
 
-## Dependencies
-- CMake >= 3.20
-- C/C++17 compiler
-- [Linux] libudev >= 1.0.0
-- [optional] OpenCV 4 (required if building examples and for record and replay)
-- [optional] PCL (required for point cloud example)
+### The OAK Camera Pipeline
 
-To install libudev on Debian based systems (Ubuntu, etc.): `sudo apt install libudev-dev`
+**DepthAI handles:**
+1. **Stereo depth estimation** - Calculates distance to objects (spatial coordinates)
+2. **YOLOv6 neural inference** - Detects objects in real-time
+3. **Synchronized RGB + Depth** - Provides color video + depth map
 
-To install OpenCV:
-MacOS: `brew install opencv`
-Linux: `sudo apt install libopencv-dev`
-Windows: `choco install opencv`
+**Our implementation (`examples/python/SpatialDetectionNetwork/spatial_detection.py`):**
+```python
+# DepthAI pipeline setup
+modelDescription = dai.NNModelDescription("yolov6-nano")  # Object detection
+pipeline = dai.Pipeline()
 
-To install PCL:
-MacOS: `brew install pcl`
-Linux: `sudo apt install libpcl-dev`
+# Nodes for stereo depth + neural detection
+spatialDetectionNode = pipeline.createYoloSpatialDetectionNetwork()
+monoLeft = pipeline.createMonoCamera()   # Left camera
+monoRight = pipeline.createMonoCamera()  # Right camera
+stereo = pipeline.createStereoDepth()    # Depth calculation
+rgb = pipeline.createColorCamera()       # RGB feed
 
-## Using Python bindings
-Installing the latest pre-released version of the library can be done with:
-```
-python3 -m pip install --extra-index-url https://artifacts.luxonis.com/artifactory/luxonis-python-release-local/ --pre -U depthai
+# Link nodes together
+monoLeft.out → stereo.left
+monoRight.out → stereo.right
+stereo.depth → spatialDetectionNode.inputDepth
+rgb.preview → spatialDetectionNode.input
 ```
 
-or by running:
-```
-python3 examples/python/install_requirements.py on the branch you want to install
-```
+### Why DepthAI?
 
-For more specific information about Python bindings, see [Python README](./bindings/python/README.md).
+- **Hardware acceleration**: Neural inference runs on device (not PC)
+- **Stereo depth**: Embedded stereo pair calculates distance without extra setup
+- **Real-time**: <100ms latency for detection + depth
+- **Compact**: Works with standard OAK camera (4K RGB + stereo cameras)
 
+## 🚀 Quick Start
 
-## Building
+### 1. Install Dependencies
 
-Make sure submodules are updated
-```
-git submodule update --init --recursive
-```
-
-Then configure and build
-
-```
-cmake -S . -B build
-cmake --build build --parallel [num CPU cores]
-```
-On Windows it's often required to specify the location of the OpenCV installation. In case you used chocolatey to install OpenCV, you can use the following command:
-
-```
-cmake -S . -B build -DOpenCV_DIR=C:/tools/opencv/build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --parallel [num CPU cores]
-```
-> ℹ️ To speed up build times, use `cmake --build build --parallel [num CPU cores]`.
-
-### Dynamic library
-
-To build a dynamic version of the library configure with the following option added
-```
-cmake -S . -B build -D'BUILD_SHARED_LIBS=ON'
-cmake --build build --parallel [num CPU cores]
+```bash
+pip install depthai opencv-python numpy requests fastapi uvicorn
+pip install face-recognition easyocr geopy folium
+pip install faster-whisper edge-tts sounddevice webrtcvad
 ```
 
-## Installation and Integration
-Installation of the DepthAI library is currently only available as a dynamic library. To install the library, use the following command:
+### 2. Start Camera Input (DepthAI)
 
-```
-cmake -S . -B build -D'BUILD_SHARED_LIBS=ON' -D'CMAKE_INSTALL_PREFIX=[path/to/install/dir]'
-cmake --build build --target install --parallel [num CPU cores]
-```
-
-> ℹ️ Make sure to check out our [template C++ project](https://github.com/luxonis/depthai-core-example).
-
-### Verifying installation
-To verify the installation works as expected, you can test if the integration project compiles and runs.
-This is done by running the following command:
-
-```
-cmake -S tests/integration . -B build_integration -D'CMAKE_PREFIX_PATH=[path/to/install/dir]'
-cmake --build build_integration --target test --parallel [num CPU cores]
+```bash
+cd examples/python/SpatialDetectionNetwork
+python spatial_detection.py --serverUrl http://127.0.0.1:8000
 ```
 
-### Prebuilt library on Windows
-Under releases you may find prebuilt library for Windows, for use in either integration method. See [Releases](https://github.com/luxonis/depthai-core/releases)
+This sends object detections every **0.1 seconds** to the backend.
 
-### Using find_package for integration
+### 3. Start Backend Server
 
-> ℹ️ Due to a non-trivial dependency tree, the integration with `add_subdirectory` is not supported. Use `find_package` instead.
-
-First install the library as described in [Installation and Integration](#installation-and-integration) section.
-
-Then in your CMake project, add the following lines to your `CMakeLists.txt` file:
-
-```cmake
-
-# Add `find_package` and `target_link_libraries` to your project
-
-find_package(depthai CONFIG REQUIRED)
-...
-target_link_libraries([my-app] PRIVATE depthai::core)
+```bash
+cd backend
+python bridge.py
 ```
 
-And point CMake to your install directory:
-```
--D'CMAKE_PREFIX_PATH=[path/to/install/dir]'
-```
+Server runs at: `http://127.0.0.1:8000`
 
+### 4. Open Dashboard
 
-If library was installed to default search path like `/usr/local` on Linux, specifying `CMAKE_PREFIX_PATH` isn't necessary as CMake will find it automatically.
+Visit: `http://127.0.0.1:8000/caretaker`
 
-
-### Vcpkg integration
-For VCPKG integration, check out the example [here](https://github.com/luxonis/depthai_vcpkg_example).
-Note that the VCPKG integration is using a custom branch of DepthAI and we plan to integrate the support for it into the main branch in the future and add it to the official VCPKG repository.
-
-
-### Android
-Android is not yet supported on the v3.x.y version of DepthAI. You can still use the v2.x.y version of DepthAI for RVC2 devices or open an issue on this repository to request Android support for v3.x.y.
-
-<!-- Steps:
-
- - Install Android NDK (for example via Android Studio).
- - Set the NDK path:
-```
-export ANDROID_HOME=$HOME/.local/lib/Android
-export PATH=$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools
-export NDK=$ANDROID_HOME/ndk/23.1.7779620/ # Check version
-```
- - Ensure a recent version of cmake (apt version is outdated, install snap install cmake --classic)
- - Run cmake, set your ABI and Platform as needed:
+## 📊 Data Flow
 
 ```
-cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_PLATFORM=android-25
-cmake --build build
-``` -->
-
-
-
-<!-- ### Non-CMake integration (Visual Studio, Xcode, CodeBlocks, ...)
-
-To integrate into a different build system than CMake, the preferred way is to compile as a dynamic library and set the correct build options.
-1. First build as dynamic library: [Building Dynamic library](#dynamic-library)
-2. Then install: [Installing](#installing)
-
-In your non-CMake project (new Visual Studio project, ...)
-1. Set needed library directories:
-    - `build/install/lib` (for linking to either depthai-core or depthai-opencv)
-    - `build/install/bin` (for .dll's)
-2. And include directories
-    - `build/install/include` (library headers)
-    - `build/install/include/depthai-shared/3rdparty` (shared 3rdparty headers)
-    - `build/install/lib/cmake/depthai/dependencies/include` (dependency headers)
-
-> ℹ️ Threading library might need to be linked to explicitly.
-
-> ℹ️ Check `build/depthai-core-integration.txt` or `build/depthai-opencv-integration.txt` for up to date define options.
-The generated integration file also specifies include paths without requiring installation. -->
-
-## CMake options
-Many features of the library can be disabled or enabled using CMake options.
-One common option when building the library tests and examples is `DEPTHAI_VCPKG_INTERNAL_ONLY=OFF` which installs a predictable version of OpenCV, PCL and other optional dependencies we also use on the libraries interface.
-
-> ℹ️ When `DEPTHAI_VCPKG_INTERNAL_ONLY=OFF` is used, the library cannot be installed (apart from being installed in the scope of the vcpkg package manager).
-
-For a full list of options, see `cmake/depthaiOptions.cmake` file.
-
-## Environment variables
-
-The following environment variables can be set to alter default behavior of the library without having to recompile
-
-| Environment variable  | Description   |
-|--------------|-----------|
-| DEPTHAI_LEVEL | Sets logging verbosity, 'trace', 'debug', 'info', 'warn', 'error' and 'off' |
-| XLINK_LEVEL | Sets logging verbosity of XLink library, 'debug'. 'info', 'warn', 'error', 'fatal' and 'off' |
-| DEPTHAI_INSTALL_SIGNAL_HANDLER | Set to 0 to disable installing Backward signal handler for stack trace printing |
-| DEPTHAI_WATCHDOG | Sets device watchdog timeout. Useful for debugging (`DEPTHAI_WATCHDOG=0`), to prevent device reset while the process is paused. |
-| DEPTHAI_WATCHDOG_INITIAL_DELAY | Specifies delay after which the device watchdog starts. |
-| DEPTHAI_SEARCH_TIMEOUT | Specifies timeout in milliseconds for device searching in blocking functions. |
-| DEPTHAI_CONNECT_TIMEOUT | Specifies timeout in milliseconds for establishing a connection to a given device. |
-| DEPTHAI_BOOTUP_TIMEOUT | Specifies timeout in milliseconds for waiting the device to boot after sending the binary. |
-| DEPTHAI_RECONNECT_TIMEOUT | Specifies timeout in milliseconds for reconnecting to a device after a connection loss. If set to 0, reconnect is disabled. |
-| DEPTHAI_PROTOCOL | Restricts default search to the specified protocol. Options: `any`, `usb`, `tcpip`, `tcpshd`. |
-| DEPTHAI_PLATFORM | Restricts default search to the specified platform. Options: `any`, `rvc2`, `rvc3`, `rvc4`. |
-| DEPTHAI_RPC_READ_TIMEOUT | Specifies timeout in milliseconds for reading RPC responses. If 0, wait indefinitely. |
-| DEPTHAI_RPC_WRITE_TIMEOUT | Specifies timeout in milliseconds for writing RPC requests. If 0, wait indefinitely. |
-| DEPTHAI_DEVICE_MXID_LIST | Restricts default search to the specified MXIDs. Accepts comma separated list of MXIDs. Lists filter results in an "AND" manner and not "OR" |
-| DEPTHAI_DEVICE_ID_LIST | Alias to MXID list. Lists filter results in an "AND" manner and not "OR" |
-| DEPTHAI_DEVICE_NAME_LIST | Restricts default search to the specified NAMEs. Accepts comma separated list of NAMEs. Lists filter results in an "AND" manner and not "OR". It also looks for NAMEs outside of the host's subnet in case of tcpip. |
-| DEPTHAI_DEVICE_BINARY | Overrides device Firmware binary. Mostly for internal debugging purposes. |
-| DEPTHAI_DEVICE_RVC4_FWP | Overrides device RVC4 Firmware binary. Mostly for internal debugging purposes. |
-| DEPTHAI_BOOTLOADER_BINARY_USB | Overrides device USB Bootloader binary. Mostly for internal debugging purposes. |
-| DEPTHAI_BOOTLOADER_BINARY_ETH | Overrides device Network Bootloader binary. Mostly for internal debugging purposes. |
-| DEPTHAI_ALLOW_FACTORY_FLASHING | Internal use only |
-| DEPTHAI_LIBUSB_ANDROID_JAVAVM | JavaVM pointer that is passed to libusb for rootless Android interaction with devices. Interpreted as decimal value of uintptr_t |
-| DEPTHAI_CRASHDUMP | Directory in which to save the crash dump. |
-| DEPTHAI_CRASHDUMP_TIMEOUT | Specifies the duration in milliseconds to wait for device reboot when obtaining a crash dump. Crash dump retrieval disabled if 0. |
-| DEPTHAI_ENABLE_ANALYTICS_COLLECTION | Enables automatic analytics collection (pipeline schemas) used to improve the library |
-| DEPTHAI_DISABLE_CRASHDUMP_COLLECTION | Disables automatic crash dump collection used to improve the library |
-| DEPTHAI_HUB_EVENTS_BASE_URL | URL for events of the Luxonis Hub |
-| DEPTHAI_HUB_API_KEY | API key for the Luxonis Hub |
-| DEPTHAI_ZOO_INTERNET_CHECK | (Default) 1 - perform internet check, if available, download the newest model version 0 - skip internet check and use cached model |
-| DEPTHAI_ZOO_INTERNET_CHECK_TIMEOUT | (Default) 1000 - timeout in milliseconds for the internet check |
-| DEPTHAI_ZOO_CACHE_PATH | (Default) .depthai_cached_models - Folder where cached zoo models are stored |
-| DEPTHAI_ZOO_MODELS_PATH | (Default) depthai_models - Folder where zoo model description files are stored |
-| DEPTHAI_RECORD | Enables holistic record to the specified directory. |
-| DEPTHAI_REPLAY | Replays holistic replay from the specified file or directory. |
-| DEPTHAI_PROFILING | Enables runtime profiling of data transfer between the host and connected devices. Set to 1 to enable. Requires DEPTHAI_LEVEL=debug or lower to print. |
-| DEPTHAI_PIPELINE_DEBUGGING | Enables pipeline debugging with state dumps. DEPTHAI_LEVEL=trace is required to print the state dumps. |
-| DEPTHAI_AUTOCALIBRATION | Runs recalibration of the stereo pair and, by default, flashes successful calibration to non-volatile memory (EEPROM). DEPTHAI_AUTOCALIBRATION=CONTINUOUS: runs check repetitively; DEPTHAI_AUTOCALIBRATION=ON_START: runs calibration only at the start of the pipeline; DEPTHAI_AUTOCALIBRATION=OFF: no recalibration. |
-
-## Running tests
-
-To run the tests build the library with the following options
-```
-cmake -S. -Bbuild -D'DEPTHAI_TEST_EXAMPLES=ON' -D'DEPTHAI_BUILD_TESTS=ON' -D'DEPTHAI_BUILD_EXAMPLES=ON'
-cmake --build build
+┌─────────────────────────┐
+│   OAK Camera (DepthAI)  │
+│  - YOLOv6 detection     │
+│  - Stereo depth         │
+│  - RGB video            │
+└────────────┬────────────┘
+             │ (HTTP POST @ 0.1s)
+             ↓
+┌─────────────────────────┐
+│  bridge.py (FastAPI)    │
+│  /detections endpoint   │
+└────────────┬────────────┘
+             │
+      ┌──────┴──────┬──────────┬──────────┐
+      ↓             ↓          ↓          ↓
+   Objects      Faces       OCR       Location
+   [Filter]  [Recognition] [Text]   [Geocode]
+      │             │          │          │
+      └──────────────┼──────────┴──────────┘
+                     ↓
+            ┌─────────────────┐
+            │  LLM Backend    │
+            │ (Emergency msg) │
+            └────────┬────────┘
+                     ↓
+            ┌─────────────────┐
+            │  TTS (Edge-TTS) │
+            │  Voice Output   │
+            └─────────────────┘
 ```
 
-Then navigate to `build` folder and run `ctest` with specified labels that denote device type to test on.
-Currently available labels:
- - usb
- - poe
- - rvc2
- - rvc4
+## 🔧 Key Features
+
+### Real-Time Detection
+- **Detection interval**: 0.1 seconds (100ms)
+- **Emergency threshold**: 2.0 meters
+- **Processing speed**: 8 FPS for faces, continuous for objects
+
+### Face Recognition
+- **Downscale**: 50% for speed
+- **Tolerance**: 0.6 (strict matching)
+- **Model**: HOG detector
+- **Known faces**: Stored in `backend/known_faces/`
+
+### Voice System
+- **Input**: Faster-Whisper (speech-to-text)
+- **Output**: Edge-TTS (text-to-speech)
+- **Interrupt**: New messages interrupt current speech immediately
+
+### Smart Prompts
+Never says "2.5 meters" - instead says:
+- "very close" (< 1m)
+- "nearby" (1-2m) 
+- "not far" (2-3m)
+- "up ahead" (far)
+
+## 📁 Project Structure
 
 ```
-cd build
-# Run tests on RVC2 devices
-ctest -L rvc2
-# Run tests on RVC4 devices
-ctest -L rvc4
+depthai-core/
+├── backend/
+│   ├── bridge.py                    # Main FastAPI server
+│   ├── prompts/                     # AI system prompts
+│   ├── known_faces/                 # Face recognition training data
+│   └── caretaker (1).html          # Monitoring dashboard
+│
+└── examples/python/SpatialDetectionNetwork/
+    └── spatial_detection.py         # DepthAI camera → object detection
 ```
 
-## Style check
+## 🎮 API Endpoints
 
-The library uses clang format to enforce a certain coding style.
-If a style check is failing, run the `clangformat` target, check the output and push changes.
+- `POST /detections` - Receive DepthAI detections
+- `GET /objects` - Current detected objects
+- `GET /faces` - Recognized people
+- `GET /ocr` - Detected text
+- `GET /location` - GPS + address
+- `POST /ask-llm/emergency` - Trigger emergency response
+- `GET /video-stream` - Live MJPEG feed
+- `GET /caretaker-data` - All data as JSON
+- `GET /docs` - Interactive API documentation
 
-To use this target clang format must be installed, preferably clang-format-18
-```
-sudo apt install clang-format-18
-```
-or using pip
-```
-python -m pip install clang-format~=18.0
-```
+See [backend/README.md](backend/README.md) for full documentation.
 
-And to apply formatting
-```
-cmake --build build --target clangformat
-```
+## 🛠️ Configuration
 
-## Documentation generation
-
-Doxygen is used to generate documentation. Follow [doxygen download](https://www.doxygen.nl/download.html#srcbin) and install the required binaries for your platform.
-
-After that specify CMake define `-D'DEPTHAI_BUILD_DOCS=ON'` and build the target `doxygen`
-
-## Debugging tips
-
-Debugging can be done using **Visual Studio Code** and either **GDB** or **LLDB** (extension 'CodeLLDB').
-LLDB in some cases was much faster to step with and resolved more `incomplete_type` variables than GDB. Your mileage may vary though.
-
-
-## Troubleshooting
-
-### Build fails with missing OpenCV dependency
-
-If your build process happen to fail due to OpenCV library not being found, but you have the OpenCV installed, please
-run build with additional `-D'OpenCV_DIR=...` flag (replacing default Ubuntu path `/usr/lib/x86_64-linux-gnu/cmake/opencv4` with yours)
-
-```
-cmake -S. -Bbuild -D'OpenCV_DIR=/usr/lib/x86_64-linux-gnu/cmake/opencv4'
+### Emergency Alert Distance
+`backend/bridge.py` line ~1244:
+```python
+EMERGENCY_THRESHOLD = 2.0  # meters
 ```
 
-Now the build process should correctly discover your OpenCV installation
-
-### Build fails due to out of memory killer
-If your build process is killed by the out of memory killer, you can try to reduce the number of parallel jobs used during the build process.
-
-The error usually looks something like this:
-```
-c++: fatal error: Killed signal terminated program cc1plus
+### Detection Frequency
+`examples/python/SpatialDetectionNetwork/spatial_detection.py` line ~48:
+```python
+self.send_interval = 0.1  # 100ms (detections per second)
 ```
 
-You can do this by passing the `--parallel` flag with a lower number of jobs to the `cmake --build` command, for example:
+### Face Recognition Settings
+`backend/bridge.py` line ~607:
+```python
+FACE_RECOGNITION_SETTINGS = {
+    "downscale_factor": 0.50,      # 50% speed
+    "process_every_n_frames": 8,   # Every 8th frame
+    "tolerance": 0.6,              # Strict matching
+}
 ```
-cmake --build build --parallel 2
+
+## 🔌 DepthAI Hardware Setup
+
+**What you need:**
+- Luxonis OAK camera (OAK-D, OAK-D Pro, etc.)
+- USB 3.0+ cable (OAK-D USB version)
+- Windows/Linux/macOS with USB support
+
+**Installation:**
+```bash
+pip install depthai
 ```
+
+**Test connection:**
+```bash
+python -c "import depthai as dai; print('✓ DepthAI connected')"
+```
+
+## 📊 Monitoring
+
+### Health Check
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+### All Live Data
+```bash
+curl http://127.0.0.1:8000/caretaker-data | jq
+```
+
+## 🐛 Troubleshooting
+
+### Camera Not Found
+```bash
+# Check DepthAI installation
+python -c "import depthai as dai; dai.Device()"
+
+# List connected devices
+python -c "import depthai as dai; print(dai.Device.getDeviceByMxId(dai.Device.getFirstAvailableDevice()))"
+```
+
+### Slow Detection
+- Reduce face recognition frequency: `process_every_n_frames: 16`
+- Lower downscale factor: `downscale_factor: 0.25`
+
+### Connection Issues
+- Ensure OAK camera is plugged in USB 3.0+ port
+- Try different USB port
+- Restart camera: `systemctl restart depthai` (Linux)
+
+## 📚 Resources
+
+- **DepthAI Docs**: https://docs.luxonis.com/
+- **YOLOv6**: Object detection model
+- **Faster-Whisper**: Speech recognition
+- **FastAPI**: Web framework
+
+## 👥 Team
+
+- **Development**: Jan Bremec (jan04bremec@gmail.com)
+- **Original Concept**: Lea Vodopivec
+
+---
+
+**Last Updated**: April 19, 2026
