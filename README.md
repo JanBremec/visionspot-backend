@@ -252,8 +252,7 @@ python -c "import depthai as dai; print(dai.Device.getDeviceByMxId(dai.Device.ge
 
 ## 👥 Team
 
-- **Development**: Jan Bremec (jan04bremec@gmail.com)
-- **Original Concept**: Lea Vodopivec
+- **Development**: Jan Bremec, Lea Vodopivec, Domen Breznik
 
 ---
 
