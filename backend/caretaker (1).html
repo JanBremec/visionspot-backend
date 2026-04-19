@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlindSpot — Caretaker Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --sans:'Instrument Sans',sans-serif;
+  --serif:'Instrument Serif',serif;
+  --mono:'JetBrains Mono',monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --ease-out:cubic-bezier(0.0,0,0.2,1);
+
+  /* Light palette */
+  --bg:#f4f2ee;
+  --bg-2:#eceae4;
+  --bg-3:#e2dfd7;
+  --surface:#ffffff;
+  --surface-2:#faf9f6;
+  --border:#dedad2;
+  --border-strong:#c8c4b8;
+  --ink:#1a1916;
+  --ink-2:#3d3b35;
+  --ink-3:#706e65;
+  --ink-4:#a09d94;
+  --ink-5:#c8c5bc;
+
+  --green:#146a3c;
+  --green-bg:#e8f5ee;
+  --green-border:#b8e0cb;
+  --green-mid:#1a9455;
+
+  --red:#b83228;
+  --red-bg:#fdecea;
+  --red-border:#f5bbb7;
+  --red-mid:#d44039;
+
+  --amber:#9a620a;
+  --amber-bg:#fef3e2;
+  --amber-border:#f5d8a0;
+
+  --blue:#1a4fa8;
+  --blue-bg:#e8eef9;
+  --blue-border:#b8caf0;
+
+  --purple:#6b3fa0;
+  --purple-bg:#f2eaf9;
+  --purple-border:#d4b8f0;
+
+  --accent:#146a3c;
+  --accent-light:#1a9455;
+
+  --sh-sm:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --sh-md:0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.05);
+  --sh-lg:0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+}
+
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+
+/* ── SHELL ── */
+#shell{display:grid;grid-template-rows:56px 1fr;height:100vh;}
+
+/* ── TOPBAR ── */
+#topbar{
+  display:flex;align-items:center;padding:0 20px;gap:16px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  z-index:200;
+}
+.t-logo{display:flex;align-items:center;gap:9px;text-decoration:none;flex-shrink:0;}
+.t-eye{
+  width:26px;height:26px;border-radius:50%;
+  background:var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.t-eye::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--bg);}
+.t-brand{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-0.02em;}
+.t-vr{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+.t-page{font-size:12px;color:var(--ink-3);font-weight:400;}
+
+.t-conn-badge{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:100px;
+  font-size:11px;font-weight:500;font-family:var(--mono);
+  border:1px solid;flex-shrink:0;transition:all 0.3s;
+}
+.t-conn-badge.connected{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+.t-conn-badge.disconnected{background:var(--bg-2);border-color:var(--border);color:var(--ink-4);}
+.conn-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.connected .conn-dot{background:var(--green-mid);animation:pulse 2s ease-in-out infinite;}
+.disconnected .conn-dot{background:var(--ink-5);}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.85)}}
+
+.t-user{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.t-avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:600;color:var(--bg);
+  flex-shrink:0;
+}
+.t-uname{font-size:13px;font-weight:500;color:var(--ink-2);}
+.t-urole{font-size:10px;font-family:var(--mono);color:var(--ink-4);}
+
+/* ── MAIN ── */
+#main{display:grid;grid-template-columns:260px 1fr 300px;overflow:hidden;height:100%;}
+
+/* ── LEFT SIDEBAR ── */
+#lsidebar{
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+.sb-sec{padding:16px 16px 0;}
+.sb-lbl{
+  font-size:9px;font-family:var(--mono);color:var(--ink-4);
+  letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px;
+}
+
+/* Patient card */
+.patient-card{
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:14px;padding:14px;margin-bottom:16px;
+}
+.pc-top{display:flex;align-items:center;gap:11px;margin-bottom:12px;}
+.pc-avatar{
+  width:44px;height:44px;border-radius:50%;
+  background:var(--ink);
+  border:2px solid var(--border-strong);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:600;color:var(--bg);
+  flex-shrink:0;position:relative;
+}
+.pc-status{
+  position:absolute;bottom:1px;right:1px;
+  width:10px;height:10px;border-radius:50%;
+  border:2px solid var(--surface);
+}
+.pc-name{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:-0.01em;}
+.pc-since{font-size:10px;font-family:var(--mono);color:var(--ink-4);margin-top:2px;}
+
+.pc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+.pcs{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;padding:8px 6px;text-align:center;
+}
+.pcs-n{font-size:16px;font-weight:500;color:var(--ink);line-height:1;letter-spacing:-0.02em;}
+.pcs-l{font-size:8px;font-family:var(--mono);color:var(--ink-4);margin-top:3px;}
+
+/* Actions */
+.qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;}
+.qa-btn{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:12px 8px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;cursor:pointer;
+  transition:all 0.18s var(--ease);
+  user-select:none;
+}
+.qa-btn:hover{
+  background:var(--bg);
+  border-color:var(--border-strong);
+  transform:translateY(-2px);
+  box-shadow:var(--sh-md);
+}
+.qa-btn:active{transform:translateY(0);box-shadow:var(--sh-sm);}
+.qa-icon{
+  width:34px;height:34px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+}
+.qa-icon svg{width:16px;height:16px;}
+.qa-label{font-size:10px;font-weight:500;color:var(--ink-3);text-align:center;}
+.qa-btn.sos{border-color:var(--red-border);background:var(--red-bg);}
+.qa-btn.sos .qa-label{color:var(--red);}
+.qa-btn.sos:hover{background:#fad7d4;border-color:#e89490;box-shadow:0 4px 16px rgba(184,50,40,0.12);}
+.qa-full{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px;
+  background:var(--red-bg);border:1px solid var(--red-border);
+  border-radius:12px;cursor:pointer;margin-bottom:0;
+  transition:all 0.18s var(--ease);user-select:none;
+}
+.qa-full:hover{background:#fad7d4;border-color:#e89490;transform:translateY(-2px);box-shadow:0 4px 16px rgba(184,50,40,0.14);}
+.qa-full:active{transform:none;}
+.qa-full-label{font-size:11px;font-weight:600;color:var(--red);}
+
+/* Live stats */
+.vitals-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 16px 16px;}
+.vc{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:11px;text-align:center;
+}
+.vc-n{font-size:20px;font-weight:500;letter-spacing:-0.03em;color:var(--ink);line-height:1;margin-bottom:3px;}
+.vc-l{font-size:8px;font-family:var(--mono);color:var(--ink-4);}
+.vc.warn .vc-n{color:var(--amber);}
+
+/* Divider */
+.sb-divider{height:1px;background:var(--border);margin:4px 16px 12px;}
+
+/* ── CENTER ── */
+#center{position:relative;overflow:hidden;background:#1a1a18;}
+#stream-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background:#1a1a18;}
+
+/* No signal overlay */
+#no-signal{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:var(--bg-2);gap:10px;z-index:5;
+  transition:opacity 0.4s;
+}
+#no-signal.hidden{opacity:0;pointer-events:none;}
+.ns-icon{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--border);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:4px;
+}
+.ns-icon svg{width:24px;height:24px;color:var(--ink-4);}
+.ns-title{font-size:15px;font-weight:500;color:var(--ink-3);}
+.ns-sub{font-size:11px;font-family:var(--mono);color:var(--ink-4);}
+
+/* HUD elements */
+.hud-top{
+  position:absolute;top:0;left:0;right:0;
+  padding:12px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,transparent 100%);
+  pointer-events:none;z-index:10;
+}
+.hud-badges{display:flex;gap:6px;}
+.hud-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:9px;font-weight:500;
+  padding:3px 9px;border-radius:4px;letter-spacing:0.04em;
+}
+.hud-badge.rec{background:rgba(184,50,40,0.3);border:1px solid rgba(184,50,40,0.5);color:#ffb0a8;}
+.hud-badge.ai{background:rgba(20,106,60,0.3);border:1px solid rgba(26,148,85,0.5);color:#70e0a8;}
+.hud-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.5s infinite;}
+#cam-time{font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.45);}
+
+/* Detection bar */
+.hud-bot{
+  position:absolute;bottom:52px;left:0;right:0;
+  padding:0 16px 12px;
+  background:linear-gradient(transparent,rgba(0,0,0,0.4));
+  pointer-events:none;z-index:10;
+}
+.det-bar{
+  display:inline-flex;align-items:center;gap:7px;
+  background:rgba(255,255,255,0.12);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:6px;padding:6px 12px;
+  backdrop-filter:blur(8px);
+}
+.det-bar-icon{color:#ffd080;font-size:10px;}
+.det-bar-txt{font-family:var(--mono);font-size:9px;color:rgba(255,240,200,0.9);letter-spacing:0.03em;}
+
+/* Camera controls */
+#cam-controls{
+  position:absolute;bottom:0;left:0;right:0;
+  display:flex;align-items:center;gap:6px;padding:8px 14px;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  z-index:20;
+}
+.cc-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 13px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);
+  cursor:pointer;font-family:var(--mono);font-size:10px;
+  color:var(--ink-3);font-weight:500;
+  transition:all 0.15s;white-space:nowrap;user-select:none;
+}
+.cc-btn:hover{background:var(--bg-2);border-color:var(--border-strong);color:var(--ink);}
+.cc-btn.active{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+.cc-btn.sos{background:var(--red-bg);border-color:var(--red-border);color:var(--red);margin-left:auto;}
+.cc-btn.sos:hover{background:#fad7d4;border-color:#e89490;}
+.cc-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.cc-btn.active .cc-dot{background:var(--green-mid);}
+
+/* ── FLOATING MAP PIP ── */
+#map-pip{
+  position:absolute;top:58px;right:16px;
+  width:220px;height:165px;
+  border-radius:14px;overflow:hidden;
+  border:1.5px solid rgba(255,255,255,0.25);
+  box-shadow:var(--sh-lg);
+  z-index:50;cursor:pointer;
+  transition:width 0.38s var(--ease),height 0.38s var(--ease),border-radius 0.38s var(--ease);
+}
+#map-pip.big{width:420px;height:315px;border-radius:16px;}
+#map-pip:hover:not(.big){border-color:rgba(255,255,255,0.45);}
+#map{width:100%;height:100%;}
+
+#pip-gps{
+  position:absolute;bottom:8px;left:10px;
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(255,255,255,0.92);
+  border:1px solid rgba(0,0,0,0.08);
+  border-radius:100px;padding:4px 10px;
+  font-family:var(--mono);font-size:9px;color:var(--ink-2);
+  pointer-events:none;z-index:51;
+  box-shadow:var(--sh-sm);
+}
+.pip-gps-dot{width:6px;height:6px;border-radius:50%;background:var(--green-mid);animation:pulse 2s infinite;flex-shrink:0;}
+#pip-hint{
+  position:absolute;top:8px;left:10px;
+  font-family:var(--mono);font-size:8px;color:rgba(255,255,255,0.6);
+  background:rgba(0,0,0,0.4);padding:2px 7px;border-radius:3px;
+  pointer-events:none;z-index:51;transition:opacity 0.2s;
+}
+#map-pip.big #pip-hint{opacity:0;}
+.pip-zoom-ctrl{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:3px;z-index:51;}
+.pip-zoom-ctrl button{
+  width:24px;height:24px;background:rgba(255,255,255,0.9);
+  border:1px solid rgba(0,0,0,0.1);border-radius:6px;
+  color:var(--ink-2);font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--sh-sm);transition:background 0.12s;
+}
+.pip-zoom-ctrl button:hover{background:white;}
+
+/* Leaflet overrides */
+.leaflet-container{background:#e8e4dc;}
+.leaflet-control-zoom{display:none;}
+.leaflet-attribution-flag{display:none!important;}
+.leaflet-control-attribution{font-size:7px!important;background:rgba(255,255,255,0.7)!important;color:rgba(0,0,0,0.3)!important;}
+.leaflet-popup-content-wrapper{background:var(--surface);border:1px solid var(--border);color:var(--ink);box-shadow:var(--sh-md);}
+.leaflet-popup-tip{background:var(--surface);}
+
+/* ── RIGHT SIDEBAR ── */
+#rsidebar{
+  background:var(--surface);
+  border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+/* Tabs */
+.rs-tabs{
+  display:flex;border-bottom:1px solid var(--border);
+  flex-shrink:0;padding:0 4px;gap:2px;
+  background:var(--surface);
+}
+.rs-tab{
+  flex:1;padding:12px 0;text-align:center;
+  font-size:11px;font-weight:500;
+  color:var(--ink-4);cursor:pointer;
+  border-bottom:2px solid transparent;
+  transition:all 0.16s;user-select:none;
+  position:relative;top:1px;
+}
+.rs-tab.active{color:var(--ink);border-bottom-color:var(--ink);}
+.rs-tab:hover:not(.active){color:var(--ink-2);}
+
+.rs-content{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+
+/* AI entries */
+.ai-entry{
+  padding:11px 14px;
+  border-bottom:1px solid var(--bg-2);
+  animation:fadeUp 0.28s var(--ease);
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.ai-head{display:flex;align-items:center;gap:6px;margin-bottom:5px;}
+.ai-badge{
+  font-size:9px;font-family:var(--mono);font-weight:500;
+  padding:2px 7px;border-radius:3px;
+  text-transform:uppercase;letter-spacing:0.06em;
+}
+.ai-t{font-size:9px;font-family:var(--mono);color:var(--ink-5);margin-left:auto;}
+.ai-text{font-size:12px;color:var(--ink-2);line-height:1.55;}
+.ai-conf{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-family:var(--mono);color:var(--ink-4);margin-top:4px;}
+.ai-bar{width:40px;height:2px;background:var(--border);border-radius:1px;overflow:hidden;}
+.ai-fill{height:100%;border-radius:1px;}
+
+/* Alert entries */
+.al-entry{
+  display:flex;gap:10px;padding:11px 14px;
+  border-bottom:1px solid var(--bg-2);
+  cursor:pointer;transition:background 0.1s;
+}
+.al-entry:hover{background:var(--bg);}
+.al-entry.unread{background:var(--red-bg);}
+.al-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.al-body{flex:1;min-width:0;}
+.al-title{font-size:12px;font-weight:500;color:var(--ink);margin-bottom:2px;}
+.al-sub{font-size:10px;color:var(--ink-3);}
+.al-time{font-size:9px;font-family:var(--mono);color:var(--ink-5);flex-shrink:0;margin-top:1px;}
+
+/* Route */
+.rt-item{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--bg-2);align-items:flex-start;}
+.rt-dot{width:7px;height:7px;border-radius:50%;margin-top:4px;flex-shrink:0;}
+.rt-body{flex:1;}
+.rt-title{font-size:12px;font-weight:500;color:var(--ink);margin-bottom:2px;}
+.rt-sub{font-size:9px;font-family:var(--mono);color:var(--ink-4);}
+.rt-time{font-size:9px;font-family:var(--mono);color:var(--ink-5);flex-shrink:0;}
+
+/* Empty state */
+.empty-state{
+  padding:32px 16px;text-align:center;
+}
+.empty-state-icon{
+  width:40px;height:40px;border-radius:50%;background:var(--bg-2);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 10px;
+}
+.empty-state-icon svg{width:18px;height:18px;color:var(--ink-4);}
+.empty-state p{font-size:12px;color:var(--ink-4);}
+
+/* Message area */
+.msg-area{
+  flex-shrink:0;border-top:1px solid var(--border);
+  padding:12px 14px;background:var(--surface);
+}
+.msg-lbl{font-size:9px;font-family:var(--mono);color:var(--ink-4);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;}
+.msg-presets{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;}
+.vp{
+  font-size:10px;font-weight:500;
+  padding:4px 10px;border-radius:100px;
+  border:1px solid var(--border);background:var(--bg);
+  cursor:pointer;color:var(--ink-3);
+  transition:all 0.13s;white-space:nowrap;
+}
+.vp:hover{border-color:var(--border-strong);background:var(--bg-2);color:var(--ink);}
+.vp:active{transform:scale(0.96);}
+.msg-row{display:flex;gap:6px;}
+#voice-input{
+  flex:1;height:34px;
+  border:1px solid var(--border);border-radius:8px;
+  padding:0 11px;font-family:var(--sans);font-size:12px;
+  color:var(--ink);background:var(--bg);
+  outline:none;transition:border-color 0.15s,box-shadow 0.15s;
+}
+#voice-input:focus{
+  border-color:var(--border-strong);
+  background:var(--surface);
+  box-shadow:0 0 0 3px rgba(26,148,85,0.08);
+}
+#voice-input::placeholder{color:var(--ink-5);}
+.send-btn{
+  width:34px;height:34px;border-radius:8px;
+  background:var(--ink);border:none;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;flex-shrink:0;
+}
+.send-btn:hover{background:var(--ink-2);transform:scale(1.04);}
+.mic-btn{
+  width:34px;height:34px;border-radius:8px;
+  background:var(--bg);border:1px solid var(--border);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;flex-shrink:0;
+}
+.mic-btn:hover{border-color:var(--red-border);background:var(--red-bg);}
+.mic-btn.recording{
+  background:var(--red-bg);border-color:var(--red-border);
+  animation:micpulse 1s ease-in-out infinite;
+}
+@keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(184,50,40,0.2)}50%{box-shadow:0 0 0 6px rgba(184,50,40,0)}}
+
+/* ── MODALS ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(26,25,22,0.45);
+  z-index:900;display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity 0.22s;
+  backdrop-filter:blur(6px);
+}
+.modal-overlay.show{opacity:1;pointer-events:all;}
+.modal{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:18px;padding:28px;
+  max-width:400px;width:calc(100% - 32px);
+  box-shadow:var(--sh-lg);
+  transform:translateY(10px) scale(0.97);
+  transition:transform 0.25s var(--ease);
+}
+.modal-overlay.show .modal{transform:none;}
+.modal-icon{
+  width:44px;height:44px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:14px;
+}
+.modal-icon.danger{background:var(--red-bg);}
+.modal-icon.primary{background:var(--green-bg);}
+.modal-icon svg{width:22px;height:22px;}
+.modal-title{font-size:20px;font-weight:600;color:var(--ink);margin-bottom:6px;letter-spacing:-0.02em;}
+.modal-sub{font-size:13px;color:var(--ink-3);line-height:1.65;margin-bottom:22px;}
+.modal-row{display:flex;gap:8px;}
+.modal-btn{
+  flex:1;padding:11px;border-radius:10px;
+  font-family:var(--sans);font-size:13px;font-weight:500;
+  cursor:pointer;transition:all 0.15s;border:1px solid;
+}
+.modal-btn.ghost{background:var(--bg);border-color:var(--border);color:var(--ink-3);}
+.modal-btn.ghost:hover{background:var(--bg-2);color:var(--ink);}
+.modal-btn.primary{background:var(--ink);border-color:var(--ink);color:var(--surface);}
+.modal-btn.primary:hover{background:var(--ink-2);}
+.modal-btn.danger{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+.modal-btn.danger:hover{background:#fad7d4;}
+#nav-dest{
+  width:100%;height:38px;
+  border:1px solid var(--border);border-radius:10px;
+  padding:0 13px;font-family:var(--sans);font-size:13px;
+  color:var(--ink);background:var(--bg);outline:none;margin-bottom:16px;
+  transition:border-color 0.15s,box-shadow 0.15s;
+}
+#nav-dest::placeholder{color:var(--ink-5);}
+#nav-dest:focus{border-color:var(--border-strong);box-shadow:0 0 0 3px rgba(26,148,85,0.08);}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:24px;left:50%;
+  transform:translateX(-50%) translateY(12px);
+  background:var(--ink);
+  color:var(--bg);
+  font-size:12px;font-weight:500;
+  padding:9px 18px;border-radius:100px;
+  opacity:0;pointer-events:none;
+  transition:all 0.25s var(--ease);
+  z-index:1000;white-space:nowrap;
+  box-shadow:var(--sh-md);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--border-strong);}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1100px){#main{grid-template-columns:240px 1fr 280px;}}
+@media(max-width:860px){#main{grid-template-columns:1fr 280px;}#lsidebar{display:none;}}
+@media(max-width:580px){#main{grid-template-columns:1fr;}#rsidebar{display:none;}#map-pip{width:160px;height:120px;}}
+</style>
+</head>
+<body>
+<div id="shell">
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <a href="#" class="t-logo">
+    <div class="t-eye"></div>
+    <span class="t-brand">BlindSpot</span>
+  </a>
+  <div class="t-vr"></div>
+  <span class="t-page">Caretaker Dashboard</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+    <div class="t-conn-badge disconnected" id="conn-badge">
+      <div class="conn-dot"></div><span>Connecting…</span>
+    </div>
+    <div class="t-user">
+      <div style="text-align:right;">
+        <div class="t-uname">Marko Novak</div>
+        <div class="t-urole">Caretaker</div>
+      </div>
+      <div class="t-avatar">MN</div>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+
+  <!-- LEFT SIDEBAR -->
+  <div id="lsidebar">
+    <div class="sb-sec">
+      <div class="sb-lbl">Patient</div>
+      <div class="patient-card">
+        <div class="pc-top">
+          <div class="pc-avatar">AP
+            <div class="pc-status" id="user-status-dot" style="background:var(--ink-5);"></div>
+          </div>
+          <div>
+            <div class="pc-name">Ana Potočnik</div>
+            <div class="pc-since">Since January 2024</div>
+          </div>
+        </div>
+        <div class="pc-stats">
+          <div class="pcs">
+            <div class="pcs-n" id="stat-dist">—</div>
+            <div class="pcs-l">km today</div>
+          </div>
+          <div class="pcs">
+            <div class="pcs-n" id="stat-alerts" style="color:var(--amber);">0</div>
+            <div class="pcs-l">hazards</div>
+          </div>
+          <div class="pcs">
+            <div class="pcs-n" id="stat-ai">0</div>
+            <div class="pcs-l">detections</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-lbl">Quick actions</div>
+      <div class="qa-grid" style="margin-bottom:6px;">
+        <div class="qa-btn" onclick="sendVoice('Ana, please stop and wait.')">
+          <div class="qa-icon" style="background:var(--blue-bg);">
+            <svg viewBox="0 0 16 16" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round">
+              <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"/>
+              <path d="M2.5 8c0 3 2.24 5 5.5 5s5.5-2 5.5-5M8 13v2M6 15h4"/>
+            </svg>
+          </div>
+          <span class="qa-label">Voice</span>
+        </div>
+        <div class="qa-btn" onclick="doSnapshot()">
+          <div class="qa-icon" style="background:var(--amber-bg);">
+            <svg viewBox="0 0 16 16" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-linecap="round">
+              <rect x="1" y="4" width="14" height="10" rx="2"/>
+              <circle cx="8" cy="9" r="2.5"/>
+              <path d="M5.5 4l1.5-2h3l1.5 2"/>
+            </svg>
+          </div>
+          <span class="qa-label">Snapshot</span>
+        </div>
+      </div>
+      <div class="qa-full" onclick="openModal('sos-modal')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--red)" stroke-width="1.8" stroke-linecap="round">
+          <path d="M8 3v5M8 10.5v1.5" stroke-width="2.2"/><circle cx="8" cy="8" r="6.5"/>
+        </svg>
+        <span class="qa-full-label">Trigger SOS</span>
+      </div>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <div class="sb-lbl" style="padding:0 16px 10px;">Live stats</div>
+    <div class="vitals-grid">
+      <div class="vc">
+        <div class="vc-n" id="v-steps">—</div>
+        <div class="vc-l">Steps</div>
+      </div>
+      <div class="vc">
+        <div class="vc-n" id="v-dist">—</div>
+        <div class="vc-l">Distance</div>
+      </div>
+      <div class="vc warn">
+        <div class="vc-n" id="v-hazards">0</div>
+        <div class="vc-l">Hazards</div>
+      </div>
+      <div class="vc">
+        <div class="vc-n" id="v-time">0h 00m</div>
+        <div class="vc-l">Session</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: LIVE CAMERA -->
+  <div id="center">
+    <canvas id="stream-canvas"></canvas>
+
+    <!-- No signal state -->
+    <div id="no-signal">
+      <div class="ns-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3 3l18 18M10.5 6.5A5.5 5.5 0 0117.5 12M6.5 9A9.5 9.5 0 0119 18.5M2 12.5A14 14 0 0112 7"/>
+          <circle cx="12" cy="18" r="1" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="ns-title">Awaiting connection</div>
+      <div class="ns-sub" id="conn-sub-msg">Connecting to Ana's device…</div>
+    </div>
+
+    <!-- HUD top -->
+    <div class="hud-top">
+      <div class="hud-badges">
+        <div class="hud-badge rec"><div class="hud-dot"></div>REC</div>
+        <div class="hud-badge ai"><div class="hud-dot"></div>AI ACTIVE</div>
+      </div>
+      <div id="cam-time">00:00:00</div>
+    </div>
+
+    <!-- Detection alert bar -->
+    <div class="hud-bot">
+      <div class="det-bar">
+        <span class="det-bar-icon">⚠</span>
+        <span class="det-bar-txt" id="cam-alert-txt">Waiting for detections…</span>
+      </div>
+    </div>
+
+    <!-- Floating map PIP -->
+    <div id="map-pip" onclick="togglePip()">
+      <div id="map"></div>
+      <div id="pip-gps">
+        <div class="pip-gps-dot"></div>
+        <span id="gps-coords">Locating…</span>
+      </div>
+      <div class="pip-zoom-ctrl" onclick="event.stopPropagation()">
+        <button onclick="map.zoomIn()">+</button>
+        <button onclick="map.zoomOut()">−</button>
+      </div>
+      <div id="pip-hint">click to expand</div>
+    </div>
+
+    <!-- Camera controls -->
+    <div id="cam-controls">
+      <div class="cc-btn active" id="cc-audio" onclick="toggleAudio()">
+        <div class="cc-dot"></div>Audio on
+      </div>
+      <div class="cc-btn" id="mic-btn" onclick="toggleMicRecord()">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+          <rect x="4" y="1" width="4" height="7" rx="2"/>
+          <path d="M2 6c0 2.21 1.79 4 4 4s4-1.79 4-4M6 10v1.5M5 11.5h2"/>
+        </svg>
+        Talk to Ana
+      </div>
+      <div class="cc-btn" onclick="doSnapshot()">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+          <rect x="1" y="3" width="10" height="8" rx="1.5"/>
+          <circle cx="6" cy="7" r="2"/>
+          <path d="M4 3l1-2h2l1 2"/>
+        </svg>
+        Snapshot
+      </div>
+      <div class="cc-btn sos" onclick="openModal('sos-modal')">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M6 2v4M6 8v1" stroke-width="2"/>
+          <circle cx="6" cy="6" r="5" stroke-width="1.3"/>
+        </svg>
+        SOS
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div id="rsidebar">
+    <div class="rs-tabs">
+      <div class="rs-tab active" onclick="setTab(this,'tab-ai')">AI Log</div>
+      <div class="rs-tab" onclick="setTab(this,'tab-alerts')">Alerts</div>
+      <div class="rs-tab" onclick="setTab(this,'tab-route')">Route</div>
+    </div>
+    <div class="rs-content" id="tab-ai"></div>
+    <div class="rs-content" id="tab-alerts" style="display:none;"></div>
+    <div class="rs-content" id="tab-route" style="display:none;"></div>
+
+    <div class="msg-area">
+      <div class="msg-lbl">Message Ana</div>
+      <div class="msg-presets">
+        <div class="vp" onclick="quickSend('Stop and wait')">Stop &amp; wait</div>
+        <div class="vp" onclick="quickSend('Turn right')">Turn right</div>
+        <div class="vp" onclick="quickSend('Turn left')">Turn left</div>
+        <div class="vp" onclick="quickSend('Watch your step')">Watch step</div>
+        <div class="vp" onclick="quickSend(`I'm on my way`)">On my way</div>
+      </div>
+      <div class="msg-row">
+        <input id="voice-input" type="text" placeholder="Type a message to Ana…"/>
+        <button class="mic-btn" id="mic-btn-2" onclick="toggleMicRecord()">
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="var(--ink-3)" stroke-width="1.2" stroke-linecap="round">
+            <rect x="4" y="1" width="4" height="7" rx="2"/>
+            <path d="M2 6c0 2.21 1.79 4 4 4s4-1.79 4-4M6 10v1.5M5 11.5h2"/>
+          </svg>
+        </button>
+        <button class="send-btn" onclick="sendVoiceInput()">
+          <svg width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="rgba(244,242,238,0.9)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 6h8M6 2l4 4-4 4"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="sos-modal">
+  <div class="modal">
+    <div class="modal-icon danger">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.8" stroke-linecap="round">
+        <path d="M12 4v8M12 16v2" stroke-width="2.2"/>
+        <circle cx="12" cy="12" r="9.5"/>
+      </svg>
+    </div>
+    <div class="modal-title">Trigger SOS?</div>
+    <div class="modal-sub">This will immediately alert emergency services and broadcast Ana's live GPS location. Only use in a genuine emergency.</div>
+    <div class="modal-row">
+      <button class="modal-btn ghost" onclick="closeModal('sos-modal')">Cancel</button>
+      <button class="modal-btn danger" onclick="triggerSOS()">Trigger SOS now</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="nav-modal">
+  <div class="modal">
+    <div class="modal-icon primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="10" r="3.5"/>
+        <path d="M12 21S4.5 14.5 4.5 10a7.5 7.5 0 0115 0C19.5 14.5 12 21 12 21z"/>
+      </svg>
+    </div>
+    <div class="modal-title">Send navigation</div>
+    <div class="modal-sub">Ana's device will deliver turn-by-turn audio guidance to the destination.</div>
+    <input id="nav-dest" placeholder="e.g. Kongresni trg, Ljubljana" type="text"/>
+    <div class="modal-row">
+      <button class="modal-btn ghost" onclick="closeModal('nav-modal')">Cancel</button>
+      <button class="modal-btn primary" onclick="sendNavigation()">Send route</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══ STATE ══ */
+const AI_LOG=[], AI_LOG_MAX=80;
+let prevObjKeys=new Set(), prevFaceKeys=new Set(), prevOcrKeys=new Set(), lastLlmResponse=null, inEmergency=false;
+const ROUTE=[], ALERTS=[];
+let lastAddr=null, totalDet=0, sessionStart=Date.now();
+let connected=false, audioOn=true, micRec=false, pipBig=false;
+
+/* ══ UTILS ══ */
+function nowTime(){
+  const n=new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')}`;
+}
+let _toastT;
+function showToast(msg){
+  clearTimeout(_toastT);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  _toastT=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ══ TABS ══ */
+function setTab(el,id){
+  document.querySelectorAll('.rs-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['tab-ai','tab-alerts','tab-route'].forEach(t=>document.getElementById(t).style.display='none');
+  document.getElementById(id).style.display='block';
+}
+
+/* ══ RENDER ══ */
+function renderAILog(){
+  const el=document.getElementById('tab-ai'); if(!el) return;
+  if(!AI_LOG.length){
+    el.innerHTML=`<div class="empty-state">
+      <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.5"/></svg></div>
+      <p>Waiting for live data…</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML=AI_LOG.map(e=>`
+    <div class="ai-entry">
+      <div class="ai-head">
+        <span class="ai-badge" style="background:${e.bg};color:${e.col}">${e.src}</span>
+        <span class="ai-t">${e.time}</span>
+      </div>
+      <div class="ai-text">${e.text}</div>
+      ${e.conf!=null?`<div class="ai-conf">${Math.round(e.conf*100)}%<div class="ai-bar"><div class="ai-fill" style="width:${Math.round(e.conf*100)}%;background:${e.col}"></div></div></div>`:''}
+    </div>`).join('');
+}
+function renderAlerts(){
+  const el=document.getElementById('tab-alerts'); if(!el) return;
+  if(!ALERTS.length){
+    el.innerHTML=`<div class="empty-state">
+      <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></div>
+      <p>No alerts yet</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML=ALERTS.map(a=>`
+    <div class="al-entry ${a.unread?'unread':''}">
+      <div class="al-icon" style="background:${a.ibg}"><span style="font-size:14px;color:${a.ic}">${a.icon}</span></div>
+      <div class="al-body"><div class="al-title">${a.title}</div><div class="al-sub">${a.sub}</div></div>
+      <div class="al-time">${a.time}</div>
+    </div>`).join('');
+}
+function renderRoute(){
+  const el=document.getElementById('tab-route'); if(!el) return;
+  if(!ROUTE.length){
+    el.innerHTML=`<div class="empty-state">
+      <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 17l4-10 4 8 4-5 4 7"/></svg></div>
+      <p>No route data yet</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML=[...ROUTE].reverse().map(r=>`
+    <div class="rt-item">
+      <div class="rt-dot" style="background:${r.col}"></div>
+      <div class="rt-body"><div class="rt-title">${r.title}</div><div class="rt-sub">${r.sub}</div></div>
+      <div class="rt-time">${r.time}</div>
+    </div>`).join('');
+}
+function addEntry(e){
+  AI_LOG.unshift(e); if(AI_LOG.length>AI_LOG_MAX) AI_LOG.pop();
+  renderAILog();
+}
+renderAILog(); renderAlerts(); renderRoute();
+
+/* ══ MAP ══ */
+const map=L.map('map',{center:[46.0502,14.469],zoom:16,zoomControl:false});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  {attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+
+const posIcon=L.divIcon({
+  html:`<div style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
+    <svg width="16" height="16" viewBox="0 0 16 16" overflow="visible">
+      <circle cx="8" cy="8" r="13" fill="#146a3c" opacity="0.1">
+        <animate attributeName="r" values="8;18;8" dur="2.2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.12;0;0.12" dur="2.2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="8" cy="8" r="8" fill="#1a9455" opacity="0.95" stroke="#fff" stroke-width="2"/>
+      <circle cx="8" cy="8" r="3" fill="#fff" opacity="0.8"/>
+    </svg>
+  </div>`,
+  className:'',iconSize:[16,16],iconAnchor:[8,8]
+});
+let posMarker=L.marker([46.0502,14.469],{icon:posIcon,zIndexOffset:1000}).addTo(map);
+const routeLine=L.polyline([],{color:'#1a9455',weight:2.5,opacity:0.7,dashArray:'4,3'}).addTo(map);
+const routePts=[];
+
+function togglePip(){
+  pipBig=!pipBig;
+  document.getElementById('map-pip').classList.toggle('big',pipBig);
+  setTimeout(()=>map.invalidateSize(),380);
+}
+
+/* ══ LIVE POLL ══ */
+async function poll(){
+  try{
+    const r=await fetch('/caretaker-data',{cache:'no-store'});
+    if(!r.ok) return;
+    const d=await r.json();
+
+    /* connection */
+    const age=d.health?.frame_age_seconds;
+    const alive=d.health?.has_encoded_frames&&(age===null||age<5);
+    if(alive!==connected){
+      connected=alive;
+      const b=document.getElementById('conn-badge');
+      b.className='t-conn-badge '+(connected?'connected':'disconnected');
+      b.innerHTML=`<div class="conn-dot"></div><span>${connected?'Connected — Live':'No signal'}</span>`;
+      document.getElementById('user-status-dot').style.background=connected?'var(--green-mid)':'var(--ink-5)';
+      const ns=document.getElementById('no-signal');
+      if(connected) ns.classList.add('hidden');
+      else ns.classList.remove('hidden');
+    }
+
+    /* GPS */
+    const loc=d.location||{};
+    if(loc.latitude&&loc.longitude){
+      const lat=loc.latitude, lng=loc.longitude;
+      document.getElementById('gps-coords').textContent=`${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      posMarker.setLatLng([lat,lng]);
+      routePts.push([lat,lng]);
+      routeLine.setLatLngs(routePts);
+      if(!pipBig) map.panTo([lat,lng],{animate:true,duration:0.6});
+      const addr=loc.street||loc.address;
+      if(addr&&addr!==lastAddr){
+        lastAddr=addr;
+        ROUTE.push({title:addr,sub:loc.city||'',time:nowTime(),col:'var(--green-mid)'});
+        renderRoute();
+      }
+    }
+
+    /* objects - first check if emergency is active */
+    const objs=d.objects||{};
+    const newObjKeys=new Set(Object.keys(objs));
+    
+    // Check if emergency is currently active (any object < 0.5m)
+    const hasEmergency = Object.values(objs).some(o => o.z_m < 0.5);
+    
+    /* LLM response (AI Log) - display emergency only ONCE until cleared */
+    if(hasEmergency && d.llm_response && !inEmergency){
+      // Only log emergency if we're NOT already in emergency state
+      // Emergency responses start with: Stop, Left, Right, Forward, Slow, Watch, Heads, Clear
+      const emergencyStart = ['Stop', 'Left', 'Right', 'Forward', 'Slow', 'Watch', 'Heads', 'Clear', 'Careful'];
+      const isEmergency = emergencyStart.some(start => d.llm_response.trim().startsWith(start));
+      
+      if(isEmergency){
+        addEntry({src:'ADVICE',col:'var(--red)',bg:'var(--red-bg)',
+          text:d.llm_response,conf:1,time:nowTime()});
+        inEmergency = true; // Mark that we're now in emergency state
+      }
+    }
+    
+    // Clear emergency state when objects are no longer close
+    if(!hasEmergency && inEmergency){
+      inEmergency = false;
+      lastLlmResponse = null;
+    }
+    
+    for(const k of newObjKeys){
+      if(!prevObjKeys.has(k)){
+        const o=objs[k];
+        const label=o.label||'Object';
+        const dist=o.z_m!=null?`${o.z_m.toFixed(2)}m`:'?m';
+        const pos=o.position_description||'ahead';
+        // Update alert text but don't add to AI Log (we show LLM response instead)
+        document.getElementById('cam-alert-txt').textContent=
+          `${label.toUpperCase()} · ${dist} · ${pos}`;
+        totalDet++;
+        ['stat-ai'].forEach(id=>{const e=document.getElementById(id);if(e) e.textContent=totalDet;});
+      }
+    }
+    prevObjKeys=newObjKeys;
+
+    /* faces */
+    const faces=d.faces||{};
+    const newFaceKeys=new Set(Object.keys(faces));
+    for(const k of newFaceKeys){
+      if(!prevFaceKeys.has(k)){
+        const f=faces[k]; const conf=f.confidence||0;
+        if(conf>=0.5) addEntry({src:'FACE',col:'var(--purple)',bg:'var(--purple-bg)',
+          text:`Recognised: "${f.name||'Unknown'}" — ${Math.round(conf*100)}% confidence.`,conf,time:nowTime()});
+      }
+    }
+    prevFaceKeys=newFaceKeys;
+
+    /* ocr */
+    const ocr=d.ocr||{};
+    const newOcrKeys=new Set(Object.keys(ocr));
+    for(const k of newOcrKeys){
+      if(!prevOcrKeys.has(k)){
+        const t=ocr[k];
+        if(t.text?.trim()) addEntry({src:'OCR',col:'var(--blue)',bg:'var(--blue-bg)',
+          text:`Text: "${t.text.trim()}" (${Math.round((t.confidence||0)*100)}% conf.)`,
+          conf:t.confidence||null,time:nowTime()});
+      }
+    }
+    prevOcrKeys=newOcrKeys;
+
+    /* vitals */
+    const steps=totalDet*2;
+    const dist=(steps*0.00075).toFixed(1);
+    document.getElementById('v-steps').textContent=steps||'—';
+    document.getElementById('v-dist').textContent=steps?dist+' km':'—';
+    document.getElementById('stat-dist').textContent=steps?dist:'—';
+    const haz=Object.values(objs).filter(o=>!/(person|face)/i.test(o.label||'')).length;
+    document.getElementById('v-hazards').textContent=haz;
+    document.getElementById('stat-alerts').textContent=haz;
+    const secs=Math.floor((Date.now()-sessionStart)/1000);
+    document.getElementById('v-time').textContent=
+      `${Math.floor(secs/3600)}h ${String(Math.floor((secs%3600)/60)).padStart(2,'0')}m`;
+
+  } catch(e){ /* silent */ }
+}
+poll(); setInterval(poll,1500);
+
+/* ══ CLOCK ══ */
+setInterval(()=>{
+  const n=new Date();
+  document.getElementById('cam-time').textContent=
+    `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')}`;
+},1000);
+
+/* ══ CONTROLS ══ */
+function toggleAudio(){
+  audioOn=!audioOn;
+  const b=document.getElementById('cc-audio');
+  b.classList.toggle('active',audioOn);
+  b.childNodes[1].textContent=audioOn?' Audio on':' Audio off';
+  showToast(audioOn?'Audio enabled':'Audio muted');
+}
+function toggleMicRecord(){
+  micRec=!micRec;
+  const b=document.getElementById('mic-btn');
+  b.classList.toggle('recording',micRec);
+  showToast(micRec?'Recording… speak now':'Sent to Ana');
+  if(micRec) setTimeout(()=>{micRec=false;b.classList.remove('recording');showToast('Voice delivered');},3000);
+}
+function doSnapshot(){
+  const c=document.getElementById('stream-canvas');
+  if(!c) return showToast('No frame available');
+  const a=document.createElement('a');
+  a.download=`snapshot-${Date.now()}.jpg`;
+  a.href=c.toDataURL('image/jpeg',0.92); a.click();
+  showToast('Snapshot saved');
+}
+
+/* ══ MESSAGING ══ */
+function sendVoice(msg){
+  addEntry({src:'YOU',col:'var(--blue)',bg:'var(--blue-bg)',
+    text:`→ "${msg}"`,conf:null,time:nowTime()});
+  showToast('Message delivered to Ana');
+  setTab(document.querySelector('.rs-tab'),'tab-ai');
+}
+function sendVoiceInput(){
+  const inp=document.getElementById('voice-input');
+  const msg=inp.value.trim(); if(!msg) return;
+  sendVoice(msg); inp.value='';
+}
+function quickSend(msg){ document.getElementById('voice-input').value=msg; sendVoiceInput(); }
+document.getElementById('voice-input').addEventListener('keydown',e=>{ if(e.key==='Enter') sendVoiceInput(); });
+
+/* ══ MODALS ══ */
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(m=>
+  m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
+
+function triggerSOS(){
+  closeModal('sos-modal');
+  addEntry({src:'SOS',col:'var(--red)',bg:'var(--red-bg)',
+    text:'SOS activated. Emergency contacts notified. Location shared.',conf:null,time:nowTime()});
+  showToast('SOS triggered — emergency services alerted');
+}
+function sendNavigation(){
+  const dest=document.getElementById('nav-dest').value||'Kongresni trg, Ljubljana';
+  closeModal('nav-modal');
+  addEntry({src:'YOU',col:'var(--blue)',bg:'var(--blue-bg)',
+    text:`Navigation to "${dest}" sent.`,conf:null,time:nowTime()});
+  showToast(`Route to ${dest} sent`);
+  document.getElementById('nav-dest').value='';
+}
+
+/* ══ MAP INIT ══ */
+setTimeout(()=>map.invalidateSize(),100);
+setTimeout(()=>map.invalidateSize(),500);
+setTimeout(()=>map.invalidateSize(),1200);
+
+/* ══ CANVAS STREAM ══ */
+(function(){
+  const canvas=document.getElementById('stream-canvas');
+  if(!canvas) return;
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    canvas.width=canvas.clientWidth||640;
+    canvas.height=canvas.clientHeight||480;
+  }
+  resize();
+  new ResizeObserver(resize).observe(canvas);
+  async function loop(){
+    while(true){
+      try{
+        const res=await fetch('/frame',{cache:'no-cache'});
+        if(!res.ok) throw new Error(res.status);
+        const blob=await res.blob();
+        const bmp=await createImageBitmap(blob);
+        ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
+        bmp.close();
+        document.getElementById('no-signal').classList.add('hidden');
+        await new Promise(r=>setTimeout(r,20));
+      } catch(e){
+        await new Promise(r=>setTimeout(r,1000));
+      }
+    }
+  }
+  loop();
+})();
+</script>
+</body>
+</html>

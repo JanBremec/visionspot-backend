@@ -50,3 +50,22 @@ install*
 !install_requirements.py
 build*
 depthai_calib_backup.json
+
+# Backend local files (shouldn't be in repo)
+backend/known_faces/
+backend/*.pkl
+backend/.face_cache.pkl
+backend/temp.txt
+backend/*.jpg
+backend/*.png
+
+# Python cache and local data
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Local temporary and test files
+*.tmp
+*.log
+*.backup

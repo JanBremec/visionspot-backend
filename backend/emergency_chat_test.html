@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Chat Test - BlindSpot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html, body { 
+            height: 100%; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: 100vh;
+            gap: 20px;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .chat-section {
+            display: flex;
+            flex-direction: column;
+            background: #fafafa;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #1e52a8 0%, #0e3a7a 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .chat-status {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            display: flex;
+            gap: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.assistant {
+            justify-content: flex-start;
+        }
+
+        .message.emergency {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .user .message-bubble {
+            background: #1e52a8;
+            color: white;
+            border-radius: 12px 12px 4px 12px;
+        }
+
+        .assistant .message-bubble {
+            background: #e8e8e8;
+            color: #333;
+            border-radius: 12px 12px 12px 4px;
+        }
+
+        .emergency .message-bubble {
+            background: #c53a2a;
+            color: white;
+            border-radius: 12px 12px 12px 4px;
+            font-weight: 600;
+            animation: pulse 0.5s ease-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .message-meta {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-top: 2px;
+        }
+
+        .loading {
+            display: flex;
+            gap: 4px;
+            align-items: flex-end;
+        }
+
+        .loading span {
+            width: 6px;
+            height: 6px;
+            background: #999;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+
+        .loading span:nth-child(1) { animation-delay: 0s; }
+        .loading span:nth-child(2) { animation-delay: 0.2s; }
+        .loading span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+            30% { transform: translateY(-10px); opacity: 1; }
+        }
+
+        .chat-input-area {
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        #chat-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        #chat-input:focus {
+            outline: none;
+            border-color: #1e52a8;
+        }
+
+        #chat-input:disabled {
+            background: #f0f0f0;
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        button {
+            padding: 10px 16px;
+            background: #1e52a8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #1a4290; }
+        button:active { transform: scale(0.98); }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Right sidebar - diagnostics */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 13px;
+        }
+
+        .panel-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #1e52a8;
+            font-family: monospace;
+        }
+
+        .warning {
+            color: #c53a2a;
+            font-weight: 600;
+        }
+
+        .success {
+            color: #1a7a4a;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .status-dot.active { background: #1a7a4a; }
+        .status-dot.warning { background: #c47a0c; }
+        .status-dot.danger { background: #c53a2a; animation: blink 1s infinite; }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .object-list {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .object-item {
+            padding: 4px;
+            margin-bottom: 2px;
+            background: white;
+            border-left: 3px solid #1e52a8;
+            padding-left: 8px;
+        }
+
+        .object-distance {
+            color: #c53a2a;
+            font-weight: 600;
+        }
+
+        .emergency-mode {
+            background: linear-gradient(135deg, #c53a2a 0%, #a02817 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-align: center;
+            animation: pulse 0.5s ease-out;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #bbb;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="chat-section">
+            <div class="chat-header">
+                💬 Emergency Chat Test
+                <div class="chat-status" id="status">Ready for chat</div>
+            </div>
+            <div class="chat-messages" id="messages"></div>
+            <div class="chat-input-area">
+                <div class="input-row">
+                    <input 
+                        type="text" 
+                        id="chat-input" 
+                        placeholder="Type your message..."
+                        autocomplete="off"
+                    />
+                    <button id="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel">
+                <div class="panel-title">🚨 Emergency Status</div>
+                <div style="text-align: center; padding: 8px 0;">
+                    <span id="emergency-indicator" class="status-dot active"></span>
+                    <span id="emergency-text" class="success">Safe — Normal chat</span>
+                </div>
+                <div id="emergency-mode-panel" style="display: none; margin-top: 8px;">
+                    <div class="emergency-mode">🚨 EMERGENCY!</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">📊 Detections</div>
+                <div class="stat-row">
+                    <span class="stat-label">Objects:</span>
+                    <span class="stat-value" id="obj-count">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Closest:</span>
+                    <span class="stat-value" id="closest-dist">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Threshold:</span>
+                    <span class="stat-value">0.5m</span>
+                </div>
+                <div id="object-list" class="object-list" style="margin-top: 8px;"></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">🔗 Connection</div>
+                <div class="stat-row">
+                    <span class="stat-label">Bridge:</span>
+                    <span id="bridge-status" class="stat-value success">Connected</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Polling:</span>
+                    <span class="stat-value" id="poll-rate">2s</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Last poll:</span>
+                    <span class="stat-value" id="last-poll" style="font-size: 11px;">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">⚙️ Settings</div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px;">
+                    <input type="checkbox" id="debug-mode" />
+                    <span>Debug mode</span>
+                </label>
+                <button onclick="clearChat()" style="width: 100%; margin-top: 8px;">Clear Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const EMERGENCY_DISTANCE_THRESHOLD = 0.5; // meters
+        const POLL_INTERVAL = 500; // milliseconds (0.5 seconds)
+        const BRIDGE_URL = 'http://127.0.0.1:8000';
+
+        let emergencyMode = false;
+        let chatDisabled = false;
+        let lastPollTime = null;
+        let debugMode = false;
+
+        // Initialize
+        document.getElementById('debug-mode').addEventListener('change', (e) => {
+            debugMode = e.target.checked;
+        });
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Scroll to bottom of messages
+        function scrollToBottom() {
+            const msgs = document.getElementById('messages');
+            setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 0);
+        }
+
+        // Add message to chat
+        function addMessage(text, type = 'assistant', meta = '') {
+            const msgs = document.getElementById('messages');
+            const msgEl = document.createElement('div');
+            msgEl.className = `message ${type}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = text;
+            
+            msgEl.appendChild(bubble);
+            
+            if (meta) {
+                const metaEl = document.createElement('div');
+                metaEl.className = 'message-meta';
+                metaEl.textContent = meta;
+                msgEl.appendChild(metaEl);
+            }
+            
+            msgs.appendChild(msgEl);
+            scrollToBottom();
+        }
+
+        // Show loading indicator
+        function showLoading() {
+            const msgs = document.getElementById('messages');
+            const msgEl = document.createElement('div');
+            msgEl.className = 'message assistant';
+            msgEl.id = 'loading-indicator';
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble loading';
+            bubble.innerHTML = '<span></span><span></span><span></span>';
+            
+            msgEl.appendChild(bubble);
+            msgs.appendChild(msgEl);
+            scrollToBottom();
+        }
+
+        // Remove loading indicator
+        function hideLoading() {
+            const loading = document.getElementById('loading-indicator');
+            if (loading) loading.remove();
+        }
+
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            
+            if (!text) return;
+            if (chatDisabled) {
+                addMessage('⚠️ Chat is disabled due to emergency!', 'emergency');
+                return;
+            }
+
+            // Add user message
+            addMessage(text, 'user', new Date().toLocaleTimeString());
+            input.value = '';
+            
+            // Trigger LLM with chat prompt
+            showLoading();
+            try {
+                const requestTime = Date.now();
+                if (debugMode) console.log(`[Chat] Request sent at ${requestTime}ms with message: "${text}"`);
+                
+                const res = await fetch(`${BRIDGE_URL}/ask-llm/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_message: text })
+                });
+                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                
+                const data = await res.json();
+                if (debugMode) console.log('[Chat] Endpoint response:', data);
+                
+                // Wait for LLM to process (up to 5 seconds with retries)
+                let response = null;
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                while (!response && attempts < maxAttempts) {
+                    // Wait 500ms before polling
+                    await new Promise(r => setTimeout(r, 500));
+                    attempts++;
+                    
+                    const pollRes = await fetch(`${BRIDGE_URL}/caretaker-data`);
+                    const pollData = await pollRes.json();
+                    
+                    if (debugMode) {
+                        console.log(`[Chat] Attempt ${attempts}: LLM timestamp=${pollData.llm_timestamp}, Request time=${requestTime}, Response="${pollData.llm_response ? pollData.llm_response.substring(0, 50) : 'null'}"`);
+                    }
+                    
+                    // Check if we have a new response (newer timestamp than request)
+                    if (pollData.llm_response && 
+                        pollData.llm_timestamp > requestTime) {
+                        response = pollData.llm_response;
+                        if (debugMode) console.log('[Chat] Response received:', response);
+                        break;
+                    }
+                }
+                
+                hideLoading();
+                
+                if (response) {
+                    addMessage(response, 'assistant', new Date().toLocaleTimeString());
+                } else {
+                    addMessage('⏳ No response yet (LLM might be processing). Try again!', 'assistant');
+                    if (debugMode) console.log('[Chat] Timed out after 5 seconds');
+                }
+            } catch (err) {
+                hideLoading();
+                if (debugMode) console.error('[Chat] Error:', err);
+                addMessage(`❌ Error: ${err.message}`, 'assistant');
+            }
+        }
+
+        // Check for emergency
+        async function checkEmergency() {
+            try {
+                const res = await fetch(`${BRIDGE_URL}/caretaker-data`);
+                if (!res.ok) {
+                    updateConnectionStatus(false);
+                    return;
+                }
+                
+                updateConnectionStatus(true);
+                const data = res.json();
+                lastPollTime = new Date();
+                updateLastPoll();
+                
+                await updateDetections(data);
+            } catch (err) {
+                if (debugMode) console.error('Poll error:', err);
+                updateConnectionStatus(false);
+            }
+        }
+
+        async function updateDetections(dataPromise) {
+            const data = await dataPromise;
+            const objects = data.objects || {};
+            const objCount = Object.keys(objects).length;
+            
+            document.getElementById('obj-count').textContent = objCount;
+            
+            // Find closest object
+            let closestDist = Infinity;
+            let closestObj = null;
+            
+            for (const obj of Object.values(objects)) {
+                const dist = obj.z_m || Infinity;
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestObj = obj;
+                }
+            }
+            
+            // Update closest distance display
+            const closestEl = document.getElementById('closest-dist');
+            if (closestObj) {
+                closestEl.textContent = `${closestDist.toFixed(2)}m`;
+                closestEl.style.color = closestDist < EMERGENCY_DISTANCE_THRESHOLD ? '#c53a2a' : '#1e52a8';
+            } else {
+                closestEl.textContent = '-';
+                closestEl.style.color = '#1e52a8';
+            }
+            
+            // Update object list
+            const objList = document.getElementById('object-list');
+            objList.innerHTML = '';
+            
+            for (const obj of Object.values(objects)) {
+                const item = document.createElement('div');
+                item.className = 'object-item';
+                const dist = obj.z_m || 0;
+                const warn = dist < EMERGENCY_DISTANCE_THRESHOLD ? ' ⚠️' : '';
+                item.innerHTML = `${obj.label} <span class="object-distance">${dist.toFixed(2)}m</span>${warn}`;
+                objList.appendChild(item);
+            }
+            
+            // Check emergency condition
+            const wasEmergency = emergencyMode;
+            emergencyMode = closestDist < EMERGENCY_DISTANCE_THRESHOLD;
+            
+            if (emergencyMode) {
+                if (!wasEmergency) {
+                    // Entering emergency mode
+                    triggerEmergency(closestObj);
+                }
+            } else {
+                if (wasEmergency) {
+                    // Exiting emergency mode
+                    clearEmergency();
+                }
+            }
+        }
+
+        // Trigger emergency
+        async function triggerEmergency(closestObj) {
+            chatDisabled = true;
+            document.getElementById('chat-input').disabled = true;
+            document.getElementById('send-btn').disabled = true;
+            
+            document.getElementById('emergency-indicator').className = 'status-dot danger';
+            document.getElementById('emergency-text').innerHTML = '<span class="warning">🚨 EMERGENCY!</span>';
+            document.getElementById('emergency-mode-panel').style.display = 'block';
+            document.getElementById('status').textContent = '🚨 EMERGENCY - Object too close!';
+            
+            addMessage('🚨 EMERGENCY! Object detected too close!', 'emergency', 'NOW');
+            
+            // Clear chat history when entering emergency
+            try {
+                await fetch(`${BRIDGE_URL}/clear-chat-history`, { method: 'POST' });
+            } catch (err) {
+                if (debugMode) console.error('Failed to clear chat history:', err);
+            }
+            
+            // Get emergency response
+            try {
+                const emergencyReqTime = Date.now();
+                const res = await fetch(`${BRIDGE_URL}/ask-llm/emergency`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (res.ok) {
+                    // Wait for LLM to process with retries
+                    let response = null;
+                    let attempts = 0;
+                    const maxAttempts = 8; // Try for ~4 seconds
+                    
+                    while (!response && attempts < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 500));
+                        attempts++;
+                        
+                        const pollRes = await fetch(`${BRIDGE_URL}/caretaker-data`);
+                        const pollData = await pollRes.json();
+                        
+                        // Check if we have a newer response
+                        if (pollData.llm_response && 
+                            pollData.llm_timestamp * 1000 > emergencyReqTime) {
+                            response = pollData.llm_response;
+                            addMessage(response, 'emergency', 'EMERGENCY');
+                            break;
+                        }
+                    }
+                }
+            } catch (err) {
+                if (debugMode) console.error('Emergency LLM error:', err);
+            }
+        }
+
+        // Clear emergency
+        function clearEmergency() {
+            chatDisabled = false;
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+            
+            document.getElementById('emergency-indicator').className = 'status-dot active';
+            document.getElementById('emergency-text').innerHTML = '<span class="success">Safe — Normal chat</span>';
+            document.getElementById('emergency-mode-panel').style.display = 'none';
+            document.getElementById('status').textContent = 'Safe — Resume chat';
+            
+            addMessage('✅ Emergency cleared. Safe to resume.', 'assistant', 'RESUME');
+        }
+
+        function updateConnectionStatus(connected) {
+            const el = document.getElementById('bridge-status');
+            if (connected) {
+                el.textContent = 'Connected';
+                el.className = 'stat-value success';
+            } else {
+                el.textContent = 'Disconnected';
+                el.className = 'stat-value warning';
+            }
+        }
+
+        function updateLastPoll() {
+            if (!lastPollTime) return;
+            const time = lastPollTime.toLocaleTimeString();
+            document.getElementById('last-poll').textContent = time;
+        }
+
+        function clearChat() {
+            document.getElementById('messages').innerHTML = '';
+            emergencyMode = false;
+            chatDisabled = false;
+            
+            // Clear chat history on backend
+            try {
+                fetch(`${BRIDGE_URL}/clear-chat-history`, { method: 'POST' });
+            } catch (err) {
+                if (debugMode) console.error('Failed to clear chat history:', err);
+            }
+            
+            clearEmergency();
+        }
+
+        // Start polling
+        setInterval(checkEmergency, POLL_INTERVAL);
+        checkEmergency(); // Initial check
+
+        // Welcome message
+        window.addEventListener('load', () => {
+            addMessage('👋 Welcome to Emergency Chat Test! Type a message to start chatting. I\'ll monitor for obstacles and emergency automatically.', 'assistant', 'SYSTEM');
+        });
+    </script>
+</body>
+</html>

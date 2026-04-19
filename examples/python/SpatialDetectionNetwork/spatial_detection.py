@@ -5,6 +5,12 @@ from pathlib import Path
 import cv2
 import depthai as dai
 import numpy as np
+import requests
+import time
+import threading
+import base64
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 NEURAL_FPS = 8
 STEREO_DEFAULT_FPS = 20
@@ -12,6 +18,9 @@ STEREO_DEFAULT_FPS = 20
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--depthSource", type=str, default="stereo", choices=["stereo", "neural"]
+)
+parser.add_argument(
+    "--serverUrl", type=str, default="http://127.0.0.1:8000", help="FastAPI server URL"
 )
 args = parser.parse_args()
 # For better results on OAK4, use a segmentation model like "luxonis/yolov8-instance-segmentation-large:coco-640x480"
@@ -25,9 +34,22 @@ else:
     fps = NEURAL_FPS
 
 class SpatialVisualizer(dai.node.HostNode):
-    def __init__(self):
+    def __init__(self, server_url="http://127.0.0.1:8000"):
         dai.node.HostNode.__init__(self)
         self.sendProcessingToPipeline(True)
+        self.server_url = server_url
+        self.current_detections = []
+        self.last_send_time = time.time()
+        self.send_interval = 0.1  # Send detections every 0.1 seconds
+        self.last_frame_send_time = time.time()
+        self.frame_send_interval = 0.1  # Send frames every 100ms
+        
+        # Create persistent session with connection pooling
+        self.session = requests.Session()
+        retry = Retry(connect=1, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=2, pool_maxsize=2)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
     def build(self, depth:dai.Node.Output, detections: dai.Node.Output, rgb: dai.Node.Output):
         self.link_args(depth, detections, rgb) # Must match the inputs to the process method
 
@@ -49,14 +71,86 @@ class SpatialVisualizer(dai.node.HostNode):
 
     def displayResults(self, rgbFrame, depthFrameColor, detections):
         height, width, _ = rgbFrame.shape
+        
+        # Collect detections data
+        self.current_detections = []
         for detection in detections:
             self.drawBoundingBoxes(depthFrameColor, detection)
             self.drawDetections(rgbFrame, detection, width, height)
+            
+            # Store detection data
+            self.current_detections.append({
+                "label": detection.labelName,
+                "confidence": detection.confidence * 100,
+                "x": int(detection.spatialCoordinates.x),
+                "y": int(detection.spatialCoordinates.y),
+                "z": int(detection.spatialCoordinates.z)
+            })
+        
+        # Send detections every 3 seconds
+        current_time = time.time()
+        if current_time - self.last_send_time >= self.send_interval:
+            self.send_to_server()
+            self.last_send_time = current_time
+        
+        # Send video frames more frequently (every 100ms)
+        if current_time - self.last_frame_send_time >= self.frame_send_interval:
+            self.send_video_frame(rgbFrame)
+            self.last_frame_send_time = current_time
+        
+        # Print locally as well
 
-        cv2.imshow("Depth frame", depthFrameColor)
-        cv2.imshow("Color frame", rgbFrame)
-        if cv2.waitKey(1) == ord('q'):
-            self.stopPipeline()
+        # Try to display (may fail on headless systems, which is OK)
+        try:
+            cv2.imshow("Color frame", rgbFrame)
+            if cv2.waitKey(1) == ord('q'):
+                self.stopPipeline()
+        except cv2.error as e:
+            # OpenCV display not available - continue without display
+            # Frames are being sent to bridge.py for viewing
+            pass
+
+    def send_to_server(self):
+        """Send current detections to the FastAPI server"""
+        try:
+            payload = {
+                "timestamp": time.time(),
+                "detections": self.current_detections
+            }
+            response = self.session.post(f"{self.server_url}/detections", json=payload, timeout=2)
+            if response.status_code == 200:
+                print(f"✓ Sent {len(self.current_detections)} detections to server")
+            else:
+                print(f"✗ Server error: {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            print("✗ Cannot connect to server. Make sure it's running on", self.server_url)
+        except Exception as e:
+            print(f"✗ Error sending to server: {e}")
+
+    def send_video_frame(self, frame):
+        """Send video frame to the FastAPI server"""
+        try:
+            # Encode frame to JPEG bytes
+            ret, buffer = cv2.imencode('.jpg', frame)
+            if not ret:
+                print("✗ Failed to encode frame to JPEG")
+                return
+            
+            # Encode to base64
+            frame_b64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+            
+            payload = {"frame": frame_b64}
+            response = self.session.post(f"{self.server_url}/video-frame", json=payload, timeout=1)
+            if response.status_code == 200:
+                print(f"✓ Sent video frame to server")
+            else:
+                print(f"✗ Video frame error: {response.status_code}")
+        except requests.exceptions.Timeout:
+            print("✗ Frame send timeout")
+        except requests.exceptions.ConnectionError as e:
+            print(f"✗ Cannot connect to server for video: {e}")
+        except Exception as e:
+            print(f"✗ Error sending video frame: {e}")
 
     def drawBoundingBoxes(self, depthFrameColor, detection):
         roiData = detection.boundingBoxMapping
@@ -105,7 +199,7 @@ with dai.Pipeline() as p:
     spatialDetectionNetwork = p.create(dai.node.SpatialDetectionNetwork).build(
         camRgb, depthSource, modelDescription
     )
-    visualizer = p.create(SpatialVisualizer)
+    visualizer = p.create(SpatialVisualizer, args.serverUrl)
 
     spatialDetectionNetwork.spatialLocationCalculator.initialConfig.setSegmentationPassthrough(False)
     spatialDetectionNetwork.input.setBlocking(False)
@@ -119,5 +213,6 @@ with dai.Pipeline() as p:
     )
 
     print("Starting pipeline with depth source: ", args.depthSource)
+    print("Sending detections to server: ", args.serverUrl)
 
     p.run()
